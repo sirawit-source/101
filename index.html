@@ -1,0 +1,1076 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AstroAlgo: ตะลุยอวกาศ พิชิตอัลกอริทึม</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Three.js r128 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- OrbitControls -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <!-- Google Font Kanit -->
+    <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        body {
+            font-family: 'Kanit', sans-serif;
+            background-color: #0b0d1b;
+            color: #ffffff;
+            overflow-x: hidden;
+            user-select: none;
+        }
+        
+        /* Custom scrollbar for commands box */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(139, 92, 246, 0.4);
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(139, 92, 246, 0.7);
+        }
+
+        .glow-card {
+            box-shadow: 0 0 15px rgba(139, 92, 246, 0.25);
+        }
+        
+        .glow-text {
+            text-shadow: 0 0 10px rgba(167, 139, 250, 0.6);
+        }
+
+        /* Command Card Animations */
+        .cmd-card {
+            transition: all 0.2s ease;
+            cursor: grab;
+        }
+        .cmd-card:active {
+            cursor: grabbing;
+        }
+        .cmd-card:hover {
+            transform: translateY(-2px);
+        }
+
+        .drop-zone-active {
+            border-color: #a855f7 !important;
+            background-color: rgba(168, 85, 247, 0.15) !important;
+        }
+
+        /* Pulse execution active card */
+        .active-execution {
+            ring: 4px ring-yellow-400;
+            border-color: #facc15 !important;
+            transform: scale(1.05);
+            box-shadow: 0 0 20px rgba(250, 204, 21, 0.6);
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between bg-[#0b0d1b] text-slate-100">
+
+    <!-- Navigation / Top Status Bar -->
+    <header class="w-full bg-slate-900/80 backdrop-blur-md border-b border-indigo-900/50 px-4 py-3 flex flex-wrap justify-between items-center z-10 gap-2">
+        <div class="flex items-center space-x-3">
+            <span class="text-2xl">🚀</span>
+            <div>
+                <h1 class="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 via-purple-400 to-pink-500 glow-text">
+                    AstroAlgo
+                </h1>
+                <p class="text-xs text-indigo-300">ตะลุยอวกาศ พิชิตอัลกอริทึม</p>
+            </div>
+        </div>
+
+        <!-- Level Selector & Status -->
+        <div class="flex items-center space-x-2 sm:space-x-4">
+            <div class="bg-indigo-950/80 border border-indigo-700/50 px-3 py-1.5 rounded-xl flex items-center space-x-2">
+                <span class="text-xs text-indigo-300">ด่าน:</span>
+                <select id="levelSelect" onchange="loadLevel(this.value)" class="bg-indigo-900/80 text-cyan-300 font-bold rounded px-2 py-0.5 text-sm outline-none cursor-pointer border border-indigo-600">
+                    <option value="1">1: เส้นทางตรงสายฟ้า</option>
+                    <option value="2">2: หักเลี้ยวหลบสิ่งกีดขวาง</option>
+                    <option value="3">3: เขาวงกตอุกกาบาต</option>
+                    <option value="4">4: มนต์เสน่ห์การทำซ้ำ (Loop)</option>
+                    <option value="5">5: ปรมาจารย์อัลกอริทึม</option>
+                </select>
+            </div>
+
+            <button onclick="openCharacterModal()" class="bg-purple-900/60 hover:bg-purple-800 border border-purple-500/50 px-3 py-1.5 rounded-xl text-xs sm:text-sm font-semibold flex items-center space-x-1.5 transition">
+                <span id="currentCharEmoji">🤖</span>
+                <span id="currentCharName" class="hidden sm:inline">บอท-สายลุย</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Content Grid -->
+    <main class="flex-1 max-w-7xl w-full mx-auto p-2 sm:p-4 grid grid-cols-1 lg:grid-cols-12 gap-4">
+        
+        <!-- Left Column: 3D Game Canvas Viewport -->
+        <div class="lg:col-span-7 flex flex-col space-y-2">
+            <div class="relative w-full h-[380px] sm:h-[480px] bg-slate-950 rounded-2xl border border-indigo-900/60 overflow-hidden shadow-2xl glow-card">
+                <!-- 3D Canvas Container -->
+                <div id="canvasContainer" class="w-full h-full"></div>
+
+                <!-- Overlay Instructions / Hints -->
+                <div class="absolute top-3 left-3 bg-slate-900/80 backdrop-blur border border-indigo-800/60 rounded-lg p-2.5 max-w-[260px] pointer-events-none">
+                    <div class="text-xs font-bold text-cyan-400 mb-1 flex items-center space-x-1">
+                        <span>💡</span>
+                        <span id="levelGoalTitle">ภารกิจด่านที่ 1</span>
+                    </div>
+                    <p id="levelGoalDesc" class="text-[11px] text-slate-300 leading-snug">
+                        เขียนคำสั่งพาตัวละครไปเก็บคริสตัลพลังงานสีม่วง
+                    </p>
+                </div>
+
+                <!-- Orbit Camera Hint -->
+                <div class="absolute bottom-3 right-3 bg-slate-900/70 text-[10px] text-slate-400 px-2 py-1 rounded-md border border-slate-800 backdrop-blur">
+                    🖱️ หมุนมุมกล้อง 3D ได้ด้วยการลากเมาส์
+                </div>
+            </div>
+
+            <!-- Level Info Bar & Stars -->
+            <div class="bg-indigo-950/40 border border-indigo-900/40 rounded-xl p-3 flex justify-between items-center text-xs">
+                <div class="flex items-center space-x-2">
+                    <span class="text-slate-400">จุดเริ่มต้น:</span>
+                    <span class="font-mono text-cyan-300">(0,0) หันขวา ➔</span>
+                </div>
+                <div class="flex items-center space-x-1">
+                    <span class="text-slate-400">คะแนนประสิทธิภาพ:</span>
+                    <span id="starRating" class="text-yellow-400 text-sm">⭐⭐⭐</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Column: Algorithm Workspace & Controls -->
+        <div class="lg:col-span-5 flex flex-col space-y-3">
+            
+            <!-- Command Palette (คลังคำสั่ง) -->
+            <div class="bg-slate-900/90 border border-indigo-900/60 rounded-2xl p-3.5 shadow-lg">
+                <div class="flex justify-between items-center mb-2.5">
+                    <h2 class="text-sm font-bold text-purple-300 flex items-center space-x-1.5">
+                        <span>🧰</span>
+                        <span>คลังคำสั่ง (Command Palette)</span>
+                    </h2>
+                    <span class="text-[10px] text-indigo-400">คลิกหรือลากไปวางได้</span>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2">
+                    <!-- Forward Card -->
+                    <div draggable="true" ondragstart="handleDragStart(event, 'forward')" onclick="addCommand('forward')"
+                         class="cmd-card bg-emerald-950/60 hover:bg-emerald-900/80 border border-emerald-500/50 p-2.5 rounded-xl flex items-center space-x-2.5 text-emerald-200">
+                        <span class="bg-emerald-500/20 p-1.5 rounded-lg text-lg">⬆️</span>
+                        <div>
+                            <div class="text-xs font-bold">เดินหน้า</div>
+                            <div class="text-[10px] text-emerald-400">ขยับไป 1 ช่อง</div>
+                        </div>
+                    </div>
+
+                    <!-- Turn Left Card -->
+                    <div draggable="true" ondragstart="handleDragStart(event, 'turn_left')" onclick="addCommand('turn_left')"
+                         class="cmd-card bg-blue-950/60 hover:bg-blue-900/80 border border-blue-500/50 p-2.5 rounded-xl flex items-center space-x-2.5 text-blue-200">
+                        <span class="bg-blue-500/20 p-1.5 rounded-lg text-lg">↩️</span>
+                        <div>
+                            <div class="text-xs font-bold">หันซ้าย</div>
+                            <div class="text-[10px] text-blue-400">หมุนทวนเข็ม 90°</div>
+                        </div>
+                    </div>
+
+                    <!-- Turn Right Card -->
+                    <div draggable="true" ondragstart="handleDragStart(event, 'turn_right')" onclick="addCommand('turn_right')"
+                         class="cmd-card bg-indigo-950/60 hover:bg-indigo-900/80 border border-indigo-500/50 p-2.5 rounded-xl flex items-center space-x-2.5 text-indigo-200">
+                        <span class="bg-indigo-500/20 p-1.5 rounded-lg text-lg">↪️</span>
+                        <div>
+                            <div class="text-xs font-bold">หันขวา</div>
+                            <div class="text-[10px] text-indigo-400">หมุนตามเข็ม 90°</div>
+                        </div>
+                    </div>
+
+                    <!-- Loop Card -->
+                    <div draggable="true" ondragstart="handleDragStart(event, 'loop')" onclick="addCommand('loop')"
+                         class="cmd-card bg-amber-950/60 hover:bg-amber-900/80 border border-amber-500/50 p-2.5 rounded-xl flex items-center space-x-2.5 text-amber-200">
+                        <span class="bg-amber-500/20 p-1.5 rounded-lg text-lg">🔁</span>
+                        <div>
+                            <div class="text-xs font-bold">ทำซ้ำ (Loop)</div>
+                            <div class="text-[10px] text-amber-400">ย้อนทำชุดก่อนหน้า 1 รอบ</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Algorithm Sequence Box (กล่องอัลกอริทึม) -->
+            <div class="flex-1 min-h-[220px] bg-slate-900/90 border border-indigo-900/60 rounded-2xl p-3.5 flex flex-col justify-between shadow-lg">
+                <div>
+                    <div class="flex justify-between items-center mb-2">
+                        <h2 class="text-sm font-bold text-cyan-300 flex items-center space-x-1.5">
+                            <span>📜</span>
+                            <span>กล่องอัลกอริทึม (Program Sequence)</span>
+                        </h2>
+                        <span id="cmdCount" class="text-xs font-mono text-purple-400">0 / 12 คำสั่ง</span>
+                    </div>
+
+                    <!-- Drop Target Container -->
+                    <div id="algorithmBox" 
+                         ondragover="handleDragOver(event)" 
+                         ondragleave="handleDragLeave(event)" 
+                         ondrop="handleDrop(event)"
+                         class="w-full min-h-[140px] max-h-[210px] bg-slate-950/80 border-2 border-dashed border-indigo-800/60 rounded-xl p-2.5 overflow-y-auto flex flex-wrap gap-2 transition-all">
+                        
+                        <!-- Placeholder inside box when empty -->
+                        <div id="emptyPlaceholder" class="w-full h-full min-h-[120px] flex flex-col items-center justify-center text-slate-500 text-xs text-center p-4">
+                            <span class="text-2xl mb-1 opacity-50">📥</span>
+                            <span>คลิกคำสั่งด้านบน หรือลากการ์ดมาวางที่นี่</span>
+                            <span class="text-[10px] text-slate-600 mt-1">เรียงลำดับขั้นตอนอัลกอริทึมเพื่อแก้ปริศนา</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Action Execution Buttons -->
+                <div class="pt-3 flex items-center space-x-2 border-t border-indigo-900/40">
+                    <button id="runBtn" onclick="runAlgorithm()" 
+                            class="flex-1 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 font-bold py-2.5 px-4 rounded-xl shadow-lg transition flex items-center justify-center space-x-2">
+                        <span class="text-lg">▶️</span>
+                        <span class="text-sm">เล่นคำสั่ง</span>
+                    </button>
+
+                    <button id="resetBtn" onclick="resetStage()" 
+                            class="bg-slate-800 hover:bg-slate-700 text-indigo-200 border border-indigo-700/50 font-semibold py-2.5 px-3.5 rounded-xl transition flex items-center justify-center space-x-1" title="รีเซ็ตตำแหน่ง">
+                        <span>🔄</span>
+                        <span class="text-xs">รีเซ็ต</span>
+                    </button>
+
+                    <button onclick="clearCommands()" 
+                            class="bg-rose-950/50 hover:bg-rose-900/60 text-rose-300 border border-rose-800/40 font-semibold py-2.5 px-3.5 rounded-xl transition flex items-center justify-center space-x-1" title="ล้างคำสั่งทั้งหมด">
+                        <span>🗑️</span>
+                        <span class="text-xs">ล้าง</span>
+                    </button>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <!-- Modal: Character Selection -->
+    <div id="charModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-slate-900 border border-indigo-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl glow-card">
+            <h2 class="text-xl font-bold text-center text-cyan-300 mb-2">🚀 เลือกตัวละครผู้สำรวจอวกาศ</h2>
+            <p class="text-xs text-center text-slate-400 mb-6">เลือกโมเดลตัวละคร 3D ที่คุณชอบเพื่อใช้ในการผจญภัย</p>
+
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
+                <!-- Character 1 -->
+                <div onclick="selectCharacter('bot')" id="charCard-bot" class="bg-slate-800/80 hover:bg-cyan-950/50 border-2 border-cyan-500/80 rounded-xl p-4 text-center cursor-pointer transition transform hover:scale-105">
+                    <div class="text-4xl mb-2">🤖</div>
+                    <div class="text-sm font-bold text-cyan-300">บอท-สายลุย</div>
+                    <div class="text-[10px] text-cyan-400/80 mt-1">หุ่นยนต์อวกาศ Cyan</div>
+                </div>
+
+                <!-- Character 2 -->
+                <div onclick="selectCharacter('cat')" id="charCard-cat" class="bg-slate-800/80 hover:bg-pink-950/50 border-2 border-slate-700 hover:border-pink-500/80 rounded-xl p-4 text-center cursor-pointer transition transform hover:scale-105">
+                    <div class="text-4xl mb-2">🐱</div>
+                    <div class="text-sm font-bold text-pink-300">แคท-อวกาศ</div>
+                    <div class="text-[10px] text-pink-400/80 mt-1">แมวน้อย Magenta</div>
+                </div>
+
+                <!-- Character 3 -->
+                <div onclick="selectCharacter('dino')" id="charCard-dino" class="bg-slate-800/80 hover:bg-emerald-950/50 border-2 border-slate-700 hover:border-emerald-500/80 rounded-xl p-4 text-center cursor-pointer transition transform hover:scale-105">
+                    <div class="text-4xl mb-2">🦖</div>
+                    <div class="text-sm font-bold text-emerald-300">ไดโน-พิกเซล</div>
+                    <div class="text-[10px] text-emerald-400/80 mt-1">ไดโนเสาร์ Lime</div>
+                </div>
+            </div>
+
+            <button onclick="closeCharacterModal()" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2.5 rounded-xl transition">
+                ยืนยันตัวละคร
+            </button>
+        </div>
+    </div>
+
+    <!-- Modal: Result / Feedback Box (Replaces Alert) -->
+    <div id="resultModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-slate-900 border border-purple-600/80 rounded-2xl max-w-md w-full p-6 text-center shadow-2xl">
+            <div id="resultIcon" class="text-5xl mb-3">🎉</div>
+            <h2 id="resultTitle" class="text-2xl font-bold text-cyan-300 mb-2">สำเร็จภารกิจ!</h2>
+            <p id="resultMessage" class="text-sm text-slate-300 mb-6">คุณเขียนอัลกอริทึมได้ถูกต้องสมบูรณ์แบบ!</p>
+
+            <div class="flex space-x-3">
+                <button id="retryBtn" onclick="closeResultModal(); resetStage();" class="flex-1 bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-200 font-bold py-2.5 rounded-xl transition">
+                    🔄 ลองใหม่
+                </button>
+                <button id="nextLevelBtn" onclick="closeResultModal(); nextLevel();" class="flex-1 bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-400 hover:to-indigo-500 text-white font-bold py-2.5 rounded-xl transition">
+                    ด่านต่อไป ➔
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="w-full text-center py-2 text-[11px] text-indigo-400/60 border-t border-indigo-950">
+        AstroAlgo Educational Web Game &bull; บทเรียนเรื่องลำดับขั้นตอนและการทำซ้ำ (Loop)
+    </footer>
+
+    <script>
+        /* --- Web Audio API Synthesizer (No external sound files required) --- */
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        let audioCtx = null;
+
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new AudioCtx();
+            }
+        }
+
+        function playTone(freq, type, duration, vol = 0.1) {
+            try {
+                initAudio();
+                if (audioCtx.state === 'suspended') {
+                    audioCtx.resume();
+                }
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = type;
+                osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+                gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(audioCtx.currentTime + duration);
+            } catch (e) {}
+        }
+
+        function playSound(type) {
+            if (type === 'step') playTone(300, 'sine', 0.1, 0.08);
+            if (type === 'turn') playTone(450, 'triangle', 0.12, 0.08);
+            if (type === 'loop') playTone(600, 'sawtooth', 0.15, 0.06);
+            if (type === 'win') {
+                playTone(523.25, 'sine', 0.15, 0.1);
+                setTimeout(() => playTone(659.25, 'sine', 0.15, 0.1), 150);
+                setTimeout(() => playTone(783.99, 'sine', 0.3, 0.12), 300);
+            }
+            if (type === 'fail') {
+                playTone(220, 'sawtooth', 0.2, 0.1);
+                setTimeout(() => playTone(160, 'sawtooth', 0.3, 0.12), 180);
+            }
+        }
+
+        /* --- Game Levels Definition --- */
+        const LEVELS = {
+            1: {
+                title: "ด่านที่ 1: เส้นทางตรงสายฟ้า",
+                desc: "เรียนรู้ลำดับขั้นตอนเบื้องต้น: วางคำสั่ง 'เดินหน้า' 4 ครั้ง เพื่อไปถึงคริสตัลพลังงาน",
+                target: { x: 4, z: 0 },
+                obstacles: [],
+                optimalBlocks: 4
+            },
+            2: {
+                title: "ด่านที่ 2: หักเลี้ยวหลบสิ่งกีดขวาง",
+                desc: "ฝึกเลี้ยวทิศทาง: ใช้ 'หันขวา' และ 'หันซ้าย' ร่วมกับเดินหน้าเพื่อหลบอุกกาบาต",
+                target: { x: 2, z: 2 },
+                obstacles: [{ x: 2, z: 0 }],
+                optimalBlocks: 5
+            },
+            3: {
+                title: "ด่านที่ 3: เขาวงกตอุกกาบาต",
+                desc: "วางแผนขั้นตอนแบบซับซ้อนขึ้น นำทางอ้อมอุกกาบาตหลายก้อนไปยังเป้าหมาย",
+                target: { x: 4, z: 4 },
+                obstacles: [{ x: 1, z: 0 }, { x: 1, z: 1 }, { x: 3, z: 2 }, { x: 3, z: 3 }],
+                optimalBlocks: 9
+            },
+            4: {
+                title: "ด่านที่ 4: มนต์เสน่ห์การทำซ้ำ (Loop)",
+                desc: "ใช้คำสั่ง 'ทำซ้ำ (Loop)' เพื่อย้อนทำชุดคำสั่งย่อยก่อนหน้า ลดจำนวนบล็อกที่ต้องใช้!",
+                target: { x: 2, z: 2 },
+                obstacles: [{ x: 0, z: 1 }, { x: 1, z: 2 }],
+                optimalBlocks: 4
+            },
+            5: {
+                title: "ด่านที่ 5: ปรมาจารย์อัลกอริทึม",
+                desc: "ภารกิจท้าทายระดับสูง! ผสมผสานการเลี้ยวและ Loop เพื่อลุยผ่านสมรภูมิอวกาศ",
+                target: { x: 4, z: 2 },
+                obstacles: [{ x: 1, z: 0 }, { x: 1, z: 1 }, { x: 3, z: 3 }, { x: 2, z: 4 }],
+                optimalBlocks: 6
+            }
+        };
+
+        // Current Game State
+        let currentLevel = 1;
+        let selectedCharacter = 'bot'; // 'bot', 'cat', 'dino'
+        let commandSequence = []; // Array of string keys
+        let isExecuting = false;
+
+        // Character State
+        let charGridPos = { x: 0, z: 0 };
+        let charDirection = 0; // 0: East(+X), 1: South(+Z), 2: West(-X), 3: North(-Z)
+
+        /* --- Three.js 3D Scene Setup --- */
+        let scene, camera, renderer, controls;
+        let characterMeshGroup, crystalMesh, obstacleMeshes = [];
+        const GRID_SIZE = 5;
+        const CELL_SIZE = 2; // World units per grid square
+
+        function initThreeJS() {
+            const container = document.getElementById('canvasContainer');
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+
+            // Scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x0b0d1b);
+            scene.fog = new THREE.FogExp2(0x0b0d1b, 0.025);
+
+            // Camera
+            camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000);
+            camera.position.set(0, 10, 11);
+
+            // Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(width, height);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            container.appendChild(renderer.domElement);
+
+            // OrbitControls
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.maxPolarAngle = Math.PI / 2.1; // Don't go under floor
+            controls.minDistance = 6;
+            controls.maxDistance = 22;
+            controls.target.set(0, 0, 0);
+
+            // Lighting
+            const ambientLight = new THREE.AmbientLight(0xdbeaff, 0.6);
+            scene.add(ambientLight);
+
+            const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            dirLight.position.set(8, 15, 8);
+            dirLight.castShadow = true;
+            dirLight.shadow.mapSize.width = 1024;
+            dirLight.shadow.mapSize.height = 1024;
+            scene.add(dirLight);
+
+            const pointLight = new THREE.PointLight(0xa855f7, 1.5, 12);
+            pointLight.position.set(0, 4, 0);
+            scene.add(pointLight);
+
+            // Build Grid Board
+            createGridBoard();
+
+            // Create Target Item (Crystal)
+            createCrystalTarget();
+
+            // Load Initial Character
+            updateCharacterModel();
+
+            // Load Initial Level Objects
+            loadLevel(1);
+
+            // Window Resize Listener
+            window.addEventListener('resize', onWindowResize);
+
+            // Animation Loop
+            animate();
+        }
+
+        function createGridBoard() {
+            const boardGroup = new THREE.Group();
+            const offset = (GRID_SIZE * CELL_SIZE) / 2 - CELL_SIZE / 2;
+
+            for (let r = 0; r < GRID_SIZE; r++) {
+                for (let c = 0; c < GRID_SIZE; c++) {
+                    const isEven = (r + c) % 2 === 0;
+                    const tileGeo = new THREE.BoxGeometry(CELL_SIZE - 0.1, 0.3, CELL_SIZE - 0.1);
+                    
+                    const tileMat = new THREE.MeshStandardMaterial({
+                        color: isEven ? 0x1e1b4b : 0x2e1065,
+                        roughness: 0.4,
+                        metalness: 0.2,
+                        emissive: isEven ? 0x090526 : 0x130738
+                    });
+
+                    const tile = new THREE.Mesh(tileGeo, tileMat);
+                    tile.position.set(c * CELL_SIZE - offset, -0.15, r * CELL_SIZE - offset);
+                    tile.receiveShadow = true;
+                    boardGroup.add(tile);
+
+                    // Tile Glowing Border lines
+                    const edges = new THREE.EdgesGeometry(tileGeo);
+                    const lineMat = new THREE.LineBasicMaterial({ color: isEven ? 0x4338ca : 0x6d28d9 });
+                    const wireframe = new THREE.LineSegments(edges, lineMat);
+                    wireframe.position.copy(tile.position);
+                    boardGroup.add(wireframe);
+                }
+            }
+
+            // Outer Base Frame
+            const baseGeo = new THREE.BoxGeometry(GRID_SIZE * CELL_SIZE + 0.4, 0.4, GRID_SIZE * CELL_SIZE + 0.4);
+            const baseMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.8 });
+            const base = new THREE.Mesh(baseGeo, baseMat);
+            base.position.set(0, -0.4, 0);
+            boardGroup.add(base);
+
+            scene.add(boardGroup);
+        }
+
+        function createProceduralCharacter(type) {
+            const group = new THREE.Group();
+
+            if (type === 'bot') {
+                // Bot-Alpha (Cyan Futuristic Robot)
+                const bodyGeo = new THREE.BoxGeometry(0.7, 0.7, 0.7);
+                const bodyMat = new THREE.MeshStandardMaterial({ color: 0x06b6d4, metalness: 0.8, roughness: 0.2 });
+                const body = new THREE.Mesh(bodyGeo, bodyMat);
+                body.position.y = 0.55;
+                body.castShadow = true;
+                group.add(body);
+
+                // Head
+                const headGeo = new THREE.BoxGeometry(0.5, 0.4, 0.5);
+                const headMat = new THREE.MeshStandardMaterial({ color: 0x22d3ee, metalness: 0.5 });
+                const head = new THREE.Mesh(headGeo, headMat);
+                head.position.y = 1.15;
+                head.castShadow = true;
+                group.add(head);
+
+                // Glowing Eye Visor
+                const visorGeo = new THREE.BoxGeometry(0.4, 0.12, 0.1);
+                const visorMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8 });
+                const visor = new THREE.Mesh(visorGeo, visorMat);
+                visor.position.set(0, 1.18, 0.23);
+                group.add(visor);
+
+                // Antenna Cone
+                const antGeo = new THREE.ConeGeometry(0.08, 0.3, 8);
+                const antMat = new THREE.MeshStandardMaterial({ color: 0xf43f5e });
+                const ant = new THREE.Mesh(antGeo, antMat);
+                ant.position.set(0, 1.5, 0);
+                group.add(ant);
+
+            } else if (type === 'cat') {
+                // Space-Cat (Pink Cute Astronaut Cat)
+                const bodyGeo = new THREE.SphereGeometry(0.42, 16, 16);
+                const bodyMat = new THREE.MeshStandardMaterial({ color: 0xec4899, roughness: 0.3 });
+                const body = new THREE.Mesh(bodyGeo, bodyMat);
+                body.position.y = 0.48;
+                body.castShadow = true;
+                group.add(body);
+
+                // Head Sphere
+                const headGeo = new THREE.SphereGeometry(0.35, 16, 16);
+                const headMat = new THREE.MeshStandardMaterial({ color: 0xf472b6, roughness: 0.3 });
+                const head = new THREE.Mesh(headGeo, headMat);
+                head.position.y = 1.0;
+                head.castShadow = true;
+                group.add(head);
+
+                // Helmet Visor Glass (Transparent Sphere)
+                const helmetGeo = new THREE.SphereGeometry(0.42, 16, 16);
+                const helmetMat = new THREE.MeshPhysicalMaterial({
+                    color: 0x38bdf8,
+                    transparent: true,
+                    opacity: 0.4,
+                    roughness: 0.1,
+                    transmission: 0.8
+                });
+                const helmet = new THREE.Mesh(helmetGeo, helmetMat);
+                helmet.position.y = 1.0;
+                group.add(helmet);
+
+                // Cat Ears (Cones)
+                const earGeo = new THREE.ConeGeometry(0.12, 0.25, 4);
+                const earMat = new THREE.MeshStandardMaterial({ color: 0xdb2777 });
+                
+                const leftEar = new THREE.Mesh(earGeo, earMat);
+                leftEar.position.set(-0.2, 1.35, 0);
+                leftEar.rotation.z = 0.2;
+                group.add(leftEar);
+
+                const rightEar = new THREE.Mesh(earGeo, earMat);
+                rightEar.position.set(0.2, 1.35, 0);
+                rightEar.rotation.z = -0.2;
+                group.add(rightEar);
+
+            } else if (type === 'dino') {
+                // Dino-Pixel (Lime Green Blocky Dinosaur)
+                const bodyGeo = new THREE.BoxGeometry(0.65, 0.6, 0.7);
+                const bodyMat = new THREE.MeshStandardMaterial({ color: 0x84cc16, roughness: 0.5 });
+                const body = new THREE.Mesh(bodyGeo, bodyMat);
+                body.position.y = 0.5;
+                body.castShadow = true;
+                group.add(body);
+
+                // Dino Head
+                const headGeo = new THREE.BoxGeometry(0.5, 0.45, 0.55);
+                const headMat = new THREE.MeshStandardMaterial({ color: 0xa3e635 });
+                const head = new THREE.Mesh(headGeo, headMat);
+                head.position.set(0, 0.95, 0.1);
+                head.castShadow = true;
+                group.add(head);
+
+                // Spikes on back (Cones)
+                const spikeGeo = new THREE.ConeGeometry(0.1, 0.2, 4);
+                const spikeMat = new THREE.MeshStandardMaterial({ color: 0xeab308 });
+                for (let i = 0; i < 3; i++) {
+                    const spike = new THREE.Mesh(spikeGeo, spikeMat);
+                    spike.position.set(0, 0.85 + i * 0.15, -0.2 - i * 0.15);
+                    group.add(spike);
+                }
+
+                // Eyes (Small Spheres)
+                const eyeGeo = new THREE.SphereGeometry(0.07, 8, 8);
+                const eyeMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+                const e1 = new THREE.Mesh(eyeGeo, eyeMat);
+                e1.position.set(0.26, 1.0, 0.25);
+                const e2 = new THREE.Mesh(eyeGeo, eyeMat);
+                e2.position.set(-0.26, 1.0, 0.25);
+                group.add(e1);
+                group.add(e2);
+            }
+
+            return group;
+        }
+
+        function updateCharacterModel() {
+            if (characterMeshGroup) {
+                scene.remove(characterMeshGroup);
+            }
+            characterMeshGroup = createProceduralCharacter(selectedCharacter);
+            scene.add(characterMeshGroup);
+            updateCharacterPose(false);
+        }
+
+        function createCrystalTarget() {
+            const crystalGroup = new THREE.Group();
+
+            // Octahedron Energy Crystal
+            const geo = new THREE.OctahedronGeometry(0.45, 0);
+            const mat = new THREE.MeshStandardMaterial({
+                color: 0xa855f7,
+                emissive: 0x7e22ce,
+                roughness: 0.1,
+                metalness: 0.9
+            });
+            crystalMesh = new THREE.Mesh(geo, mat);
+            crystalMesh.position.y = 0.7;
+            crystalMesh.castShadow = true;
+            crystalGroup.add(crystalMesh);
+
+            // Inner glowing core
+            const coreGeo = new THREE.OctahedronGeometry(0.25, 0);
+            const coreMat = new THREE.MeshBasicMaterial({ color: 0xf0abfc });
+            const core = new THREE.Mesh(coreGeo, coreMat);
+            core.position.y = 0.7;
+            crystalGroup.add(core);
+
+            crystalGroup.name = "crystalTarget";
+            scene.add(crystalGroup);
+        }
+
+        function createObstacleMesh(x, z) {
+            const geo = new THREE.DodecahedronGeometry(0.45, 1);
+            const mat = new THREE.MeshStandardMaterial({
+                color: 0x475569,
+                roughness: 0.9,
+                metalness: 0.1
+            });
+            const mesh = new THREE.Mesh(geo, mat);
+            
+            // Randomize vertex roughness slightly for organic stone look
+            const pos = gridToWorld(x, z);
+            mesh.position.set(pos.x, 0.45, pos.z);
+            mesh.rotation.set(Math.random(), Math.random(), Math.random());
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+
+            scene.add(mesh);
+            obstacleMeshes.push(mesh);
+        }
+
+        function clearObstacles() {
+            obstacleMeshes.forEach(mesh => scene.remove(mesh));
+            obstacleMeshes = [];
+        }
+
+        function gridToWorld(gx, gz) {
+            const offset = (GRID_SIZE * CELL_SIZE) / 2 - CELL_SIZE / 2;
+            return {
+                x: gx * CELL_SIZE - offset,
+                z: gz * CELL_SIZE - offset
+            };
+        }
+
+        function updateCharacterPose(animateMotion = true) {
+            const targetPos = gridToWorld(charGridPos.x, charGridPos.z);
+            
+            // Target Rotation Y angle based on direction
+            // 0: East (-PI/2), 1: South (PI), 2: West (PI/2), 3: North (0)
+            const rotYMap = [ -Math.PI / 2, Math.PI, Math.PI / 2, 0 ];
+            const targetRotY = rotYMap[charDirection];
+
+            if (!animateMotion) {
+                characterMeshGroup.position.set(targetPos.x, 0, targetPos.z);
+                characterMeshGroup.rotation.y = targetRotY;
+            } else {
+                // Smooth position & rotation tween inside render loop or direct lerp
+                const startPos = characterMeshGroup.position.clone();
+                const startRotY = characterMeshGroup.rotation.y;
+                let startTime = performance.now();
+                const duration = 350; // ms
+
+                function stepTween(now) {
+                    let elapsed = now - startTime;
+                    let progress = Math.min(elapsed / duration, 1);
+                    
+                    // Ease out cubic
+                    let ease = 1 - Math.pow(1 - progress, 3);
+
+                    // Position lerp + subtle jump arc
+                    characterMeshGroup.position.x = startPos.x + (targetPos.x - startPos.x) * ease;
+                    characterMeshGroup.position.z = startPos.z + (targetPos.z - startPos.z) * ease;
+                    characterMeshGroup.position.y = Math.sin(progress * Math.PI) * 0.3; // Little hop
+
+                    // Rotation lerp
+                    characterMeshGroup.rotation.y = startRotY + (targetRotY - startRotY) * ease;
+
+                    if (progress < 1) {
+                        requestAnimationFrame(stepTween);
+                    } else {
+                        characterMeshGroup.position.y = 0;
+                    }
+                }
+                requestAnimationFrame(stepTween);
+            }
+        }
+
+        function animate(time) {
+            requestAnimationFrame(animate);
+
+            // OrbitControls update
+            controls.update();
+
+            // Floating & Spinning Crystal Target Animation
+            if (crystalMesh) {
+                const t = time * 0.002;
+                crystalMesh.rotation.y = t * 1.5;
+                crystalMesh.position.y = 0.65 + Math.sin(t * 3) * 0.12;
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        function onWindowResize() {
+            const container = document.getElementById('canvasContainer');
+            if (!container) return;
+            camera.aspect = container.clientWidth / container.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(container.clientWidth, container.clientHeight);
+        }
+
+        function loadLevel(lvlNum) {
+            currentLevel = parseInt(lvlNum);
+            document.getElementById('levelSelect').value = currentLevel;
+            const lvlData = LEVELS[currentLevel];
+
+            // Update Header Goal Info
+            document.getElementById('levelGoalTitle').innerText = lvlData.title;
+            document.getElementById('levelGoalDesc').innerText = lvlData.desc;
+
+            // Clear & Setup Obstacles
+            clearObstacles();
+            lvlData.obstacles.forEach(obs => createObstacleMesh(obs.x, obs.z));
+
+            // Position Target Crystal
+            const crystalGroup = scene.getObjectByName("crystalTarget");
+            if (crystalGroup) {
+                const pos = gridToWorld(lvlData.target.x, lvlData.target.z);
+                crystalGroup.position.set(pos.x, 0, pos.z);
+            }
+
+            // Reset Character & Sequence
+            resetStage();
+            clearCommands();
+        }
+
+        function resetStage() {
+            if (isExecuting) return;
+            charGridPos = { x: 0, z: 0 };
+            charDirection = 0; // East (Right)
+            updateCharacterPose(false);
+        }
+
+        function addCommand(cmdType) {
+            if (isExecuting) return;
+            if (commandSequence.length >= 12) {
+                playSound('fail');
+                return;
+            }
+
+            commandSequence.push(cmdType);
+            renderCommandSequenceUI();
+            playSound('step');
+        }
+
+        function removeCommand(index) {
+            if (isExecuting) return;
+            commandSequence.splice(index, 1);
+            renderCommandSequenceUI();
+            playSound('step');
+        }
+
+        function clearCommands() {
+            if (isExecuting) return;
+            commandSequence = [];
+            renderCommandSequenceUI();
+        }
+
+        function renderCommandSequenceUI() {
+            const box = document.getElementById('algorithmBox');
+            const countLabel = document.getElementById('cmdCount');
+            countLabel.innerText = `${commandSequence.length} / 12 คำสั่ง`;
+
+            if (commandSequence.length === 0) {
+                box.innerHTML = `
+                    <div id="emptyPlaceholder" class="w-full h-full min-h-[120px] flex flex-col items-center justify-center text-slate-500 text-xs text-center p-4">
+                        <span class="text-2xl mb-1 opacity-50">📥</span>
+                        <span>คลิกคำสั่งด้านบน หรือลากการ์ดมาวางที่นี่</span>
+                        <span class="text-[10px] text-slate-600 mt-1">เรียงลำดับขั้นตอนอัลกอริทึมเพื่อแก้ปริศนา</span>
+                    </div>
+                `;
+                return;
+            }
+
+            const cmdUIConfig = {
+                'forward': { title: 'เดินหน้า', icon: '⬆️', color: 'bg-emerald-900/80 border-emerald-500 text-emerald-200' },
+                'turn_left': { title: 'หันซ้าย', icon: '↩️', color: 'bg-blue-900/80 border-blue-500 text-blue-200' },
+                'turn_right': { title: 'หันขวา', icon: '↪️', color: 'bg-indigo-900/80 border-indigo-500 text-indigo-200' },
+                'loop': { title: 'ทำซ้ำ (Loop)', icon: '🔁', color: 'bg-amber-900/80 border-amber-500 text-amber-200' }
+            };
+
+            box.innerHTML = '';
+            commandSequence.forEach((cmdKey, idx) => {
+                const conf = cmdUIConfig[cmdKey];
+                const card = document.createElement('div');
+                card.id = `cmd-step-${idx}`;
+                card.className = `${conf.color} border p-2 rounded-xl flex items-center space-x-2 text-xs font-semibold shadow transition duration-200`;
+                card.innerHTML = `
+                    <span>${conf.icon}</span>
+                    <span>${conf.title}</span>
+                    <button onclick="removeCommand(${idx})" class="ml-1 text-slate-400 hover:text-rose-400 text-xs p-0.5" title="ลบ">✕</button>
+                `;
+                box.appendChild(card);
+            });
+        }
+
+        /* --- Drag & Drop Handlers --- */
+        function handleDragStart(e, type) {
+            e.dataTransfer.setData('text/plain', type);
+        }
+
+        function handleDragOver(e) {
+            e.preventDefault();
+            document.getElementById('algorithmBox').classList.add('drop-zone-active');
+        }
+
+        function handleDragLeave(e) {
+            document.getElementById('algorithmBox').classList.remove('drop-zone-active');
+        }
+
+        function handleDrop(e) {
+            e.preventDefault();
+            document.getElementById('algorithmBox').classList.remove('drop-zone-active');
+            const type = e.dataTransfer.getData('text/plain');
+            if (type) {
+                addCommand(type);
+            }
+        }
+
+        function expandCommandsWithLoop(seq) {
+            // Loop Rule: Repeats all preceding commands in the program sequence 1 additional time
+            let expanded = [];
+            for (let i = 0; i < seq.length; i++) {
+                if (seq[i] === 'loop') {
+                    // Duplicate all commands that were placed BEFORE this loop card
+                    const priorCommands = [...expanded];
+                    expanded = expanded.concat(priorCommands);
+                } else {
+                    expanded.push(seq[i]);
+                }
+            }
+            return expanded;
+        }
+
+        async function runAlgorithm() {
+            if (isExecuting) return;
+            if (commandSequence.length === 0) {
+                showResultModal('❌ ยังไม่มีคำสั่ง', 'กรุณาเพิ่มการ์ดคำสั่งลงในกล่องอัลกอริทึมก่อนกดเล่น', false);
+                return;
+            }
+
+            resetStage();
+            isExecuting = true;
+            document.getElementById('runBtn').disabled = true;
+            document.getElementById('runBtn').classList.add('opacity-50');
+
+            // Expand Loop blocks for execution sequence
+            const executionQueue = expandCommandsWithLoop(commandSequence);
+            const levelData = LEVELS[currentLevel];
+
+            let stepCount = 0;
+            let success = false;
+
+            for (let i = 0; i < executionQueue.length; i++) {
+                const cmd = executionQueue[i];
+                stepCount++;
+
+                // Highlight UI card corresponding to raw index if possible
+                const rawCard = document.getElementById(`cmd-step-${i % commandSequence.length}`);
+                if (rawCard) rawCard.classList.add('active-execution');
+
+                await new Promise(r => setTimeout(r, 450));
+
+                if (cmd === 'forward') {
+                    // Compute dx, dz based on direction (0: East, 1: South, 2: West, 3: North)
+                    const dx = charDirection === 0 ? 1 : (charDirection === 2 ? -1 : 0);
+                    const dz = charDirection === 1 ? 1 : (charDirection === 3 ? -1 : 0);
+
+                    const newX = charGridPos.x + dx;
+                    const newZ = charGridPos.z + dz;
+
+                    // Bounds Check (0 to 4 grid)
+                    if (newX < 0 || newX >= GRID_SIZE || newZ < 0 || newZ >= GRID_SIZE) {
+                        playSound('fail');
+                        showResultModal('💥 ตกขอบอวกาศ!', 'ตัวละครเดินหลุดออกนอกกระดาน ลองปรับอัลกอริทึมใหม่นะ', false);
+                        cleanupExecution();
+                        return;
+                    }
+
+                    // Obstacle Collision Check
+                    const hitObstacle = levelData.obstacles.some(obs => obs.x === newX && obs.z === newZ);
+                    if (hitObstacle) {
+                        playSound('fail');
+                        showResultModal('☄️ ชนอุกกาบาต!', 'ยานชนสิ่งกีดขวาง! วางแผนเส้นทางเพื่อหลบอุกกาบาต', false);
+                        cleanupExecution();
+                        return;
+                    }
+
+                    charGridPos = { x: newX, z: newZ };
+                    updateCharacterPose(true);
+                    playSound('step');
+
+                } else if (cmd === 'turn_left') {
+                    charDirection = (charDirection + 3) % 4; // Counter-clockwise
+                    updateCharacterPose(true);
+                    playSound('turn');
+
+                } else if (cmd === 'turn_right') {
+                    charDirection = (charDirection + 1) % 4; // Clockwise
+                    updateCharacterPose(true);
+                    playSound('turn');
+
+                } else if (cmd === 'loop') {
+                    playSound('loop');
+                }
+
+                if (rawCard) rawCard.classList.remove('active-execution');
+
+                // Check Win Condition (Reached Crystal Target)
+                if (charGridPos.x === levelData.target.x && charGridPos.y === levelData.target.y || 
+                   (charGridPos.x === levelData.target.x && charGridPos.z === levelData.target.z)) {
+                    success = true;
+                    break;
+                }
+            }
+
+            await new Promise(r => setTimeout(r, 300));
+
+            if (success) {
+                playSound('win');
+                showResultModal('🎉 สำเร็จภารกิจ!', `ยอดเยี่ยม! คุณพาตัวละครเก็บคริสตัลพลังงานสำเร็จด้วย ${commandSequence.length} บล็อก!`, true);
+            } else {
+                playSound('fail');
+                showResultModal('🔍 ยังไม่ถึงเป้าหมาย', 'คำสั่งสิ้นสุดลงก่อนถึงคริสตัลพลังงาน ลองเพิ่มคำสั่งอีกนะ!', false);
+            }
+
+            cleanupExecution();
+        }
+
+        function cleanupExecution() {
+            isExecuting = false;
+            document.getElementById('runBtn').disabled = false;
+            document.getElementById('runBtn').classList.remove('opacity-50');
+            // Remove active highlights
+            document.querySelectorAll('#algorithmBox > div').forEach(el => el.classList.remove('active-execution'));
+        }
+
+        function openCharacterModal() {
+            document.getElementById('charModal').classList.remove('hidden');
+        }
+
+        function closeCharacterModal() {
+            document.getElementById('charModal').classList.add('hidden');
+        }
+
+        function selectCharacter(type) {
+            selectedCharacter = type;
+
+            const charMeta = {
+                'bot': { name: 'บอท-สายลุย', emoji: '🤖', color: 'border-cyan-500/80' },
+                'cat': { name: 'แคท-อวกาศ', emoji: '🐱', color: 'border-pink-500/80' },
+                'dino': { name: 'ไดโน-พิกเซล', emoji: '🦖', color: 'border-emerald-500/80' }
+            };
+
+            document.getElementById('currentCharEmoji').innerText = charMeta[type].emoji;
+            document.getElementById('currentCharName').innerText = charMeta[type].name;
+
+            // Highlight selected card
+            ['bot', 'cat', 'dino'].forEach(key => {
+                const card = document.getElementById(`charCard-${key}`);
+                if (key === type) {
+                    card.classList.add('border-cyan-500', 'bg-slate-700/80');
+                    card.classList.remove('border-slate-700');
+                } else {
+                    card.classList.remove('border-cyan-500', 'bg-slate-700/80');
+                    card.classList.add('border-slate-700');
+                }
+            });
+
+            updateCharacterModel();
+        }
+
+        function showResultModal(title, message, isWin) {
+            document.getElementById('resultIcon').innerText = isWin ? '🏆' : '⚠️';
+            document.getElementById('resultTitle').innerText = title;
+            document.getElementById('resultMessage').innerText = message;
+
+            const nextBtn = document.getElementById('nextLevelBtn');
+            if (isWin && currentLevel < Object.keys(LEVELS).length) {
+                nextBtn.classList.remove('hidden');
+            } else {
+                nextBtn.classList.add('hidden');
+            }
+
+            document.getElementById('resultModal').classList.remove('hidden');
+        }
+
+        function closeResultModal() {
+            document.getElementById('resultModal').classList.add('hidden');
+        }
+
+        function nextLevel() {
+            if (currentLevel < Object.keys(LEVELS).length) {
+                loadLevel(currentLevel + 1);
+            }
+        }
+
+        // Initialize 3D Engine on Window Load
+        window.onload = function() {
+            initThreeJS();
+        };
+    </script>
+</body>
+</html>
